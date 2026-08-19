@@ -4,7 +4,7 @@ emoji: "🔐"
 type: "tech"
 topics: ["ai","claude-code","mcp","security","go"]
 published: true
-published_at: 2026-08-26 09:30
+published_at: 2026-08-20 09:00
 ---
 
 **結論: AIエージェントに平文のAPIキーを渡すのはやめる。trustlessは「エージェントはキー名だけを知り、値はbrokerがプロセス起動時にだけ注入する」という一点に絞ったCLIです。** 外部依存は `github.com/pelletier/go-toml/v2` 1つだけ（pure Go）、配布は単一静的バイナリ。`trustless run -s <key> -- <cmd>` と `trustless proxy` で、エージェントのコンテキストにキーを載せないまま動かすのが目的です。この記事では、なぜこの形にしたのか、既存手段と何が違うのか、実際の使い方と限界までをまとめます。
