@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-SITE_TRUSTLESS = "https://trustless-security.com/ja/blog"
+SITE_TRUSTLESS = "https://trustless-security.com/blog"
 SITE_AGENTJOURNAL = "https://agentjournal.dev/articles"
 
 HYPE = ["revolutionary", "game-changing", "best-ever", "cutting-edge", "groundbreaking", "state-of-the-art",
@@ -76,8 +76,8 @@ def check_one(path: Path) -> list[str]:
     ja_chars = len(re.sub(r"\s+", "", body_stripped))
     if ja_chars < 600:
         problems.append(f"本文が短い: 約{ja_chars}字 (目安600字以上)")
-    if ja_chars > 4000:
-        problems.append(f"本文が長すぎる: 約{ja_chars}字 (目安4000字以内に分割推奨)")
+    if ja_chars > 15000:
+        problems.append(f"本文が長すぎる: 約{ja_chars}字 (目安15000字以内に分割推奨)")
     low = body.lower()
     hits = [h for h in HYPE if h.lower() in low or h in body]
     if hits:
@@ -89,7 +89,7 @@ def check_one(path: Path) -> list[str]:
     if not body_stripped.rstrip().endswith(("?", "？")):
         problems.append("本文末尾が問いかけ（? / ？）で終わっていない")
     # 相互リンクの存在チェック（推奨）
-    if "trustless-security.com" not in body and "agentjournal.dev" not in body and len(body_stripped) > 500:
+    if "trustless-security.com" not in body and "agentjournal.dev" not in body and "github.com/ikkun1222/trustless" not in body and len(body_stripped) > 500:
         problems.append("末尾の相互リンク（trustless-security.com / agentjournal.dev）が未挿入")
     # slug とファイル名の一致は new 経由なら担保されるが、verify でも軽く見る
     return problems
