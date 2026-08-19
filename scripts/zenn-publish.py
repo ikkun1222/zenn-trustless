@@ -76,8 +76,8 @@ def check_one(path: Path) -> list[str]:
     ja_chars = len(re.sub(r"\s+", "", body_stripped))
     if ja_chars < 600:
         problems.append(f"本文が短い: 約{ja_chars}字 (目安600字以上)")
-    if ja_chars > 4000:
-        problems.append(f"本文が長すぎる: 約{ja_chars}字 (目安4000字以内に分割推奨)")
+    if ja_chars > 15000:
+        problems.append(f"本文が長すぎる: 約{ja_chars}字 (目安15000字以内に分割推奨)")
     low = body.lower()
     hits = [h for h in HYPE if h.lower() in low or h in body]
     if hits:
