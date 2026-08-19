@@ -75,14 +75,14 @@ trustless と近い領域のOSSとの比較は README にまとめています�
 
 **1. 外部依存は1つだけにする。** `github.com/pelletier/go-toml/v2` だけです（`config.toml` の marshal/unmarshal と、DLPの `rules.toml` パースで使っています）。pure Go なので `CGO_ENABLED=0` で単一静的バイナリのまま配れます。「ゼロ依存」とは謳いません。1つある、と正直に書いています。依存が少ないほど `go install` / `curl | sh` での導入が壊れず、供給網の監査も楽になります。
 
-**2. エージェントはキー名だけを知る。** 値には触らせない。`trustless run -s iria/api/xai -- <cmd>` なら、エージェントは `XAI` という環境変数名だけを指定し、値は trustless が backend（`pass` / `env` / `bitwarden`）から解決して子プロセスにだけ渡します。標準出力は行単位でパターンマッチして `[REDACTED]` に置換してから返します。`--scan-args` では引数に平文が混入していないかも起動前に検査して失敗させます（exit 3, fail closed）。
+**2. エージェントはキー名だけを知る。** 値には触らせない。`trustless run -s my/api-key -- <cmd>` なら、エージェントはキー名だけを指定し、値は trustless が backend（`pass` / `env` / `bitwarden`）から解決して子プロセスにだけ渡します。標準出力は行単位でパターンマッチして `[REDACTED]` に置換してから返します。`--scan-args` では引数に平文が混入していないかも起動前に検査して失敗させます（exit 3, fail closed）。
 
 **3. 2つの注入経路を用意する。** STDIO と HTTP で置き場所が違うからです。
 
 ```mermaid
 flowchart LR
-  A[Agent: "use iria/api/xai"] --> B[trustless broker]
-  B -->|trustless run -s| C[Child process env: XAI=***]
+  A[Agent: "use my/api-key"] --> B[trustless broker]
+  B -->|trustless run -s| C[Child process env: API_KEY=***]
   B -->|trustless proxy :8080| D[HTTP header: Authorization: Bearer ***]
   C --> E[stdout -- line scan --> REDACTED]
   D --> F[upstream API]
@@ -107,9 +107,9 @@ trustless doctor
 ### 2. STDIO: 子プロセスにだけ渡す
 
 ```bash
-# pass なら pass insert iria/api/xai / Bitwarden なら bw 経由で登録済みの想定
+# 例: pass なら pass insert my/api-key / Bitwarden なら bw 経由で登録済み
 # エージェントは値を見ずに名前だけで呼ぶ
-trustless run -s iria/api/xai -- curl -s https://api.x.ai/v1/models | head
+trustless run -s my/api-key -- curl -s https://example.com/api | head
 
 # MCP サーバを broker 経由で起動（ .mcp.json に env を書かない）
 trustless mcp -- npx -y @modelcontextprotocol/server-github
@@ -125,7 +125,7 @@ trustless mcp -- npx -y @modelcontextprotocol/server-github
 backend = "bitwarden"  # pass / env / bitwarden
 
 [proxy.rules]
-"api.x.ai" = { header = "Authorization", key = "xai", prefix = "Bearer " }
+"api.example.com" = { header = "Authorization", key = "my/api-key", prefix = "Bearer " }
 "api.edinet-fsa.go.jp" = { header = "Ocp-Apim-Subscription-Key", key = "edinet" }
 "statdb.nstac.go.jp" = { query = "appid", key = "estat" }
 ```
@@ -134,7 +134,7 @@ backend = "bitwarden"  # pass / env / bitwarden
 trustless proxy start --port 8080 &
 export HTTPS_PROXY=http://127.0.0.1:8080
 # エージェントは素のリクエストを投げるだけ。ヘッダは proxy が付与する
-curl -s https://api.x.ai/v1/models | head
+curl -s https://api.example.com/v1/data | head
 ```
 
 ルール変更やキーのローテ後は `kill -HUP $(pgrep -f "trustless proxy start")` で無再起動反映（SIGHUPで config と backend キャッシュを再読込）。
@@ -142,11 +142,11 @@ curl -s https://api.x.ai/v1/models | head
 ### 4. OAuth: refresh token の面倒も broker に寄せる
 
 ```bash
-trustless oauth login google iria/api/google-oauth
+trustless oauth login google my/oauth-token
 # -> 表示された device code URL をブラウザで承認。backend に compact JSON で保存
-trustless run -s iria/api/google-oauth -- ./call-google-api.sh
+trustless run -s my/oauth-token -- ./call-api.sh
 # 有効期限が切れていれば自動で refresh、回収された refresh_token は CAS で安全に更新
-trustless oauth status iria/api/google-oauth
+trustless oauth status my/oauth-token
 ```
 
 Google / Lark の device flow と refresh grant に対応しています。access token はメモリにだけキャッシュし、有効期限の60秒前に再取得します。
@@ -176,18 +176,18 @@ DLPは2層です。Layer 1: 既知の値の部分一致（false positive ゼロ�
 
 ```bash
 # 平文が残っていないかの定期検査（CI でも同じことを実行）
-grep -r "sk-\|ghp_\|Bearer \|gho_\|xai-" ~/.config/opencode/ ~/.config/claude/ 2>/dev/null || echo "no plaintext hit"
+grep -r "sk-\|ghp_\|Bearer " ~/.config/opencode/ ~/.config/claude/ 2>/dev/null || echo "no plaintext hit"
 
 # trustless の健全性チェック（GPG / pass / gpg-agent / .env平文 / CA証明書まで見る）
 trustless doctor --json | jq .
 
 # 監査ログ（値は出ない。キー名・ホスト・判定だけ）
 journalctl --user -u trustless -o cat | grep '"event"' | tail
-# {"ts":"...","event":"proxy.inject","key":"xai","host":"api.x.ai","verdict":"inject"}
+# {"ts":"...","event":"proxy.inject","key":"my/api-key","host":"api.example.com","verdict":"inject"}
 # {"ts":"...","event":"dlp.redact","verdict":"redact","detail":"patterns=hit"}
 ```
 
-キーは用途ごとにスコープを絞って1つずつ発行します。1つのキーを全MCPで使い回すと、1プロセスの侵害で全部が漏れます。設定ファイルには `key = "xai"` のように名前だけを置き、値は broker だけが知る状態をレビューで機械的に検査できるようにしています。
+キーは用途ごとにスコープを絞って1つずつ発行します。1つのキーを全MCPで使い回すと、1プロセスの侵害で全部が漏れます。設定ファイルには `key = "my/api-key"` のように名前だけを置き、値は broker だけが知る状態をレビューで機械的に検査できるようにしています。
 
 ## できないこと — 正直な限界
 
@@ -206,7 +206,6 @@ MCPのキーは `設定ファイル → プロセス環境変数 → 会話履�
 
 ---
 
-> 元記事は trustless 公式サイトでも公開予定です: https://trustless-security.com/ja/blog/trustless-why-no-secrets-for-agents/
 > リポジトリ: https://github.com/ikkun1222/trustless
 
 あなたの環境では、どのMCPサーバのキーを最初に見直しますか？
