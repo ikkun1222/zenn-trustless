@@ -9,6 +9,16 @@ published_at: 2026-08-20 09:40
 
 **結論: AIエージェントに平文のAPIキーを渡すのはやめる。trustlessは「エージェントはキー名だけを知り、値はbrokerがプロセス起動時にだけ注入する」という一点に絞ったCLIです。** 外部依存は `github.com/pelletier/go-toml/v2` 1つだけ（pure Go）、配布は単一静的バイナリ。`trustless run -s <key> -- <cmd>` と `trustless proxy` で、エージェントのコンテキストにキーを載せないまま動かすのが目的です。この記事では、なぜこの形にしたのか、既存手段と何が違うのか、実際の使い方と限界までをまとめます。
 
+## 目次
+
+- [なぜ作ったか — エージェントに渡したキーは回収できない](#なぜ作ったか--エージェントに渡したキーは回収できない)
+- [既存の手段では何が足りなかったか](#既存の手段では何が足りなかったか)
+- [設計判断 — なぜこの形にしたか](#設計判断--なぜこの形にしたか)
+- [どう動くか — 最小の再現手順](#どう動くか--最小の再現手順)
+- [実測と運用 — 数字と回し方](#実測と運用--数字と回し方)
+- [できないこと — 正直な限界](#できないこと--正直な限界)
+- [まとめ — 置き場所を1つずらすだけで漏洩面は減る](#まとめ--置き場所を1つずらすだけで漏洩面は減る)
+
 ## なぜ作ったか — エージェントに渡したキーは回収できない
 
 MCPを触っていると、ほぼ必ずここに行き着きます。
@@ -81,13 +91,15 @@ trustless と近い領域のOSSとの比較は README にまとめています�
 
 ```mermaid
 flowchart LR
-  A[Agent: "use my/api-key"] --> B[trustless broker]
-  B -->|trustless run -s| C[Child process env: API_KEY=***]
-  B -->|trustless proxy :8080| D[HTTP header: Authorization: Bearer ***]
-  C --> E[stdout -- line scan --> REDACTED]
-  D --> F[upstream API]
+  A["Agent: use my/api-key"] -->|"trustless run -s"| C["Child env: API_KEY"]
+  A -->|"trustless proxy :8080"| D["HTTP header: Bearer"]
+  C --> E["stdout scan: REDACTED"]
+  D --> F["upstream API"]
   E --> A
+  D --> A
 ```
+
+> 補足: ノード・ラベル内の `:` `--` はMermaidで特別な意味を持つため引用符で囲んでいます。
 
 - STDIO 型: `trustless mcp -- npx -y <server>` / `trustless run -s <key> -- <cmd>` で子プロセスの `env` にだけ注入
 - HTTP 型: `trustless proxy start --port 8080` で `HTTPS_PROXY=http://127.0.0.1:8080` 経由のリクエストに `header` / `query` を注入（`config.toml` の `[proxy.rules]` で宛先ホストごとに定義）
