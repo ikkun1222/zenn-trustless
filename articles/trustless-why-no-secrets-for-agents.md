@@ -3,7 +3,7 @@ title: "AIエージェントにAPIキーを渡さない — trustlessを作っ�
 emoji: "🔐"
 type: "tech"
 topics: ["ai","claude-code","mcp","security","go"]
-published: true
+published: false
 published_at: 2026-08-20 09:40
 ---
 
